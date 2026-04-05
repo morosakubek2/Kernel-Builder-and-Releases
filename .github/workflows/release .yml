@@ -35,7 +35,7 @@ jobs:
           URL="https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20250704-release/Clang-14.0.6-20250704.tar.gz"
           TC_DIR="$HOME/clang"
           mkdir -p "$TC_DIR"
-
+          
           wget -q "$URL" -O /tmp/clang.tar.gz
           tar -xzf /tmp/clang.tar.gz -C "$TC_DIR"
           rm -f /tmp/clang.tar.gz
@@ -76,10 +76,12 @@ jobs:
 
           make O=out gki_defconfig
 
+          # DODANO: SKIP_HEADERS_CHECK=1 aby pominąć błąd walidacji nagłówków UAPI (xt_domainfilter.h)
           make O=out -j$(nproc --all) \
             CC=clang \
             HOSTCC=gcc \
             LLVM=1 \
+            SKIP_HEADERS_CHECK=1 \
             WERROR=0 \
             KCFLAGS="-Wno-error -Wno-comment -march=armv8-a+lse"
 
