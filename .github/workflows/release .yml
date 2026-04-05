@@ -1,4 +1,5 @@
 name: Build Kernel - Samsung Flip3 (b2q)
+
 on:
   workflow_dispatch:
     inputs:
@@ -26,14 +27,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev dwarves \
-            lld llvm curl git wget zip unzip tar jq libncurses5-dev zlib1g-dev lz4
+            lld llvm curl git wget zip unzip tar jq libncurses5-dev zlib1g-dev lz4 \
+            gcc-aarch64-linux-gnu
 
       - name: 🔧 Download & Setup ZyCromerZ Clang
         run: |
           URL="https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20250704-release/Clang-14.0.6-20250704.tar.gz"
           TC_DIR="$HOME/clang"
           mkdir -p "$TC_DIR"
-          
+
           wget -q "$URL" -O /tmp/clang.tar.gz
           tar -xzf /tmp/clang.tar.gz -C "$TC_DIR"
           rm -f /tmp/clang.tar.gz
@@ -66,18 +68,20 @@ jobs:
           export KBUILD_BUILD_HOST="github-actions"
           export PATH="$HOME/clang/bin:$PATH"
 
+          # Kluczowe flagi dla kompilacji krzyżowej z Clangiem
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+
           echo "🔍 Using Clang: $(clang --version | head -1)"
-          
+
           make O=out gki_defconfig
-          
+
           make O=out -j$(nproc --all) \
             CC=clang \
-            HOSTCC=clang \
+            HOSTCC=gcc \
             LLVM=1 \
-            LLVM_IAS=1 \
-            GCC_TOOLCHAIN= \
             WERROR=0 \
-            KCFLAGS="-Wno-error -Wno-comment"
+            KCFLAGS="-Wno-error -Wno-comment -march=armv8-a+lse"
 
           # Sprawdź czy powstał obraz
           ls -lh out/arch/arm64/boot/Image.gz || echo "⚠️ Image.gz not found!"
@@ -91,7 +95,7 @@ jobs:
           AK_DIR="AnyKernel3"
 
           cp "$KERNEL_OUT/Image.gz" "$AK_DIR/" 2>/dev/null || true
-          
+
           if [ -d "$KERNEL_OUT/dtb" ]; then
             mkdir -p "$AK_DIR/dtb"
             cp -r "$KERNEL_OUT/dtb"/* "$AK_DIR/dtb/" 2>/dev/null || true
@@ -111,16 +115,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: b2q-kernel-build
-          path: ${{ steps.package.outputs.zip_name }}
+          path: "${{ steps.package.outputs.zip_name }}"
           retention-days: 7
 
       - name: 🚀 Upload to Release
         if: ${{ github.event.inputs.upload_to_release == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.zip_name }}
-          name: ${{ github.event.inputs.build_title || 'b2q-kernel' }}
-          tag_name: b2q-${{ github.run_id }}
+          files: "${{ steps.package.outputs.zip_name }}"
+          name: "${{ github.event.inputs.build_title || 'b2q-kernel' }}"
+          tag_name: "b2q-${{ github.run_id }}"
           body: |
             📱 **Device:** Samsung Galaxy Z Flip3 (b2q)
             🔥 **Kernel:** android_kernel_samsung_sm8350
