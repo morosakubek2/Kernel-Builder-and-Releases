@@ -1,0 +1,133 @@
+name: Build Kernel - Samsung Flip3 (b2q)
+on:
+  workflow_dispatch:
+    inputs:
+      build_title:
+        description: 'Custom Build Title'
+        required: false
+        default: 'b2q-kernel'
+      upload_to_release:
+        description: 'Upload to GitHub Release'
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev dwarves \
+            lld llvm curl git wget zip unzip tar jq libncurses5-dev zlib1g-dev lz4
+
+      - name: 🔧 Download & Setup ZyCromerZ Clang
+        run: |
+          URL="https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20250704-release/Clang-14.0.6-20250704.tar.gz"
+          TC_DIR="$HOME/clang"
+          mkdir -p "$TC_DIR"
+          
+          wget -q "$URL" -O /tmp/clang.tar.gz
+          tar -xzf /tmp/clang.tar.gz -C "$TC_DIR"
+          rm -f /tmp/clang.tar.gz
+
+          # Naprawa struktury katalogów (przeniesienie z podfolderu do roota)
+          SUBFOLDER=$(find "$TC_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)
+          if [[ -n "$SUBFOLDER" ]]; then
+            mv "$SUBFOLDER"/* "$TC_DIR"/ 2>/dev/null || true
+            mv "$SUBFOLDER"/.[!.]* "$TC_DIR"/ 2>/dev/null || true
+            rmdir "$SUBFOLDER" 2>/dev/null || true
+          fi
+
+          echo "$TC_DIR/bin" >> $GITHUB_PATH
+          echo "✅ Toolchain ready at: $(which clang)"
+
+      - name: 🌟 Clone Kernel Source
+        run: |
+          git clone --recursive --depth=1 -j $(nproc) \
+            --branch Flip3-Android16 \
+            https://github.com/morosakubek2/flip_3_android_kernel_samsung_sm8350 kernel
+          echo "kernel-dir=$(pwd)/kernel" >> $GITHUB_OUTPUT
+        id: clone-kernel
+
+      - name: 🔨 Build Kernel
+        working-directory: kernel
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export KBUILD_BUILD_USER="morosakubek2"
+          export KBUILD_BUILD_HOST="github-actions"
+          export PATH="$HOME/clang/bin:$PATH"
+
+          echo "🔍 Using Clang: $(clang --version | head -1)"
+          
+          make O=out gki_defconfig
+          
+          make O=out -j$(nproc --all) \
+            CC=clang \
+            HOSTCC=clang \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            GCC_TOOLCHAIN= \
+            WERROR=0 \
+            KCFLAGS="-Wno-error -Wno-comment"
+
+          # Sprawdź czy powstał obraz
+          ls -lh out/arch/arm64/boot/Image.gz || echo "⚠️ Image.gz not found!"
+
+      - name: 📦 Package with AnyKernel3
+        run: |
+          git clone --recursive --depth=1 --branch b2q \
+            https://github.com/morosakubek2/AnyKernel3 AnyKernel3
+
+          KERNEL_OUT="kernel/out/arch/arm64/boot"
+          AK_DIR="AnyKernel3"
+
+          cp "$KERNEL_OUT/Image.gz" "$AK_DIR/" 2>/dev/null || true
+          
+          if [ -d "$KERNEL_OUT/dtb" ]; then
+            mkdir -p "$AK_DIR/dtb"
+            cp -r "$KERNEL_OUT/dtb"/* "$AK_DIR/dtb/" 2>/dev/null || true
+          fi
+          [ -f "$KERNEL_OUT/dtbo.img" ] && cp "$KERNEL_OUT/dtbo.img" "$AK_DIR/" || true
+
+          cd "$AK_DIR"
+          ZIP_NAME="b2q-kernel-$(date +%Y%m%d)-run${{ github.run_number }}.zip"
+          zip -r9 "../$ZIP_NAME" * -x .git/* .github/* README.md LICENSE
+          cd ..
+
+          echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "kernel_out=$KERNEL_OUT" >> $GITHUB_OUTPUT
+        id: package
+
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: b2q-kernel-build
+          path: ${{ steps.package.outputs.zip_name }}
+          retention-days: 7
+
+      - name: 🚀 Upload to Release
+        if: ${{ github.event.inputs.upload_to_release == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.package.outputs.zip_name }}
+          name: ${{ github.event.inputs.build_title || 'b2q-kernel' }}
+          tag_name: b2q-${{ github.run_id }}
+          body: |
+            📱 **Device:** Samsung Galaxy Z Flip3 (b2q)
+            🔥 **Kernel:** android_kernel_samsung_sm8350
+            🌿 **Branch:** Flip3-Android16
+            ⚙️ **Toolchain:** ZyCromerZ Clang 14.0.6
+            🏷️ **Build ID:** ${{ github.run_id }}
+            ⏱️ **Date:** $(date '+%Y-%m-%d %H:%M:%S UTC')
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
