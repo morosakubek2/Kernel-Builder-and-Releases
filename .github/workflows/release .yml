@@ -53,6 +53,7 @@ jobs:
 
       - name: 🌟 Clone Kernel Source
         run: |
+          rm -rf kernel 
           git clone --recursive --depth=1 -j $(nproc) \
             --branch Flip3-Android16 \
             https://github.com/morosakubek2/flip_3_android_kernel_samsung_sm8350 kernel
