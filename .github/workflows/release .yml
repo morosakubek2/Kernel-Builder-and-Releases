@@ -73,10 +73,11 @@ jobs:
           export CLANG_TRIPLE=aarch64-linux-gnu-
 
           echo "🔍 Using Clang: $(clang --version | head -1)"
-
+          
           make O=out gki_defconfig
-
-          # DODANO: SKIP_HEADERS_CHECK=1 aby pominąć błąd walidacji nagłówków UAPI (xt_domainfilter.h)
+          
+          # SKIP_HEADERS_CHECK=1 omija walidację nagłówków UAPI (naprawia błąd xt_domainfilter.h)
+          # KCFLAGS="-march=armv8-a+lse" naprawia błąd unknown register name 'x0' w atomic_lse.h
           make O=out -j$(nproc --all) \
             CC=clang \
             HOSTCC=gcc \
