@@ -28,17 +28,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev dwarves \
             lld llvm curl git wget zip unzip tar jq libncurses5-dev zlib1g-dev lz4 \
-            gcc-aarch64-linux-gnu
+            gcc-aarch64-linux-gnu zstd
 
-      - name: 🔧 Download & Setup ZyCromerZ Clang
+      - name: 🔧 Download & Setup Neutron Clang
         run: |
-          URL="https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20250704-release/Clang-14.0.6-20250704.tar.gz"
+          URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/10032024/neutron-clang-10032024.tar.zst"
           TC_DIR="$HOME/clang"
           mkdir -p "$TC_DIR"
           
-          wget -q "$URL" -O /tmp/clang.tar.gz
-          tar -xzf /tmp/clang.tar.gz -C "$TC_DIR"
-          rm -f /tmp/clang.tar.gz
+          wget -q "$URL" -O /tmp/neutron-clang.tar.zst
+          tar --zstd -xf /tmp/neutron-clang.tar.zst -C "$TC_DIR"
+          rm -f /tmp/neutron-clang.tar.zst
 
           # Naprawa struktury katalogów (przeniesienie z podfolderu do roota)
           SUBFOLDER=$(find "$TC_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)
@@ -49,7 +49,7 @@ jobs:
           fi
 
           echo "$TC_DIR/bin" >> $GITHUB_PATH
-          echo "✅ Toolchain ready at: $(which clang)"
+          echo "✅ Neutron Clang ready at: $(which clang)"
 
       - name: 🌟 Clone Kernel Source
         run: |
@@ -71,7 +71,7 @@ jobs:
 
           # Kluczowe flagi dla kompilacji krzyżowej z Clangiem
           export CROSS_COMPILE=aarch64-linux-gnu-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
+          # CLANG_TRIPLE usunięty – Neutron Clang nie wymaga tej zmiennej
 
           echo "🔍 Using Clang: $(clang --version | head -1)"
           
@@ -133,7 +133,7 @@ jobs:
             📱 **Device:** Samsung Galaxy Z Flip3 (b2q)
             🔥 **Kernel:** android_kernel_samsung_sm8350
             🌿 **Branch:** Flip3-Android16
-            ⚙️ **Toolchain:** ZyCromerZ Clang 14.0.6
+            ⚙️ **Toolchain:** Neutron Clang 10032024 (LLVM 19.0.0git)
             🏷️ **Build ID:** ${{ github.run_id }}
             ⏱️ **Date:** $(date '+%Y-%m-%d %H:%M:%S UTC')
           generate_release_notes: false
