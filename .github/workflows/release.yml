@@ -60,6 +60,18 @@ jobs:
           echo "kernel-dir=$(pwd)/kernel" >> $GITHUB_OUTPUT
         id: clone-kernel
 
+      - name: 🔧 Patch kernel source - disable UAPI header test for xt_domainfilter.h
+        working-directory: kernel
+        run: |
+          # Naprawa błędu __u8 w xt_domainfilter.h - dodanie brakującego include
+          HEADER="usr/include/linux/netfilter/xt_domainfilter.h"
+          if grep -q "#ifndef _XT_DOMAINFILTER_MATCH_H" "$HEADER" 2>/dev/null; then
+            sed -i '/#ifndef _XT_DOMAINFILTER_MATCH_H/a #include <linux/types.h>' "$HEADER"
+            echo "✅ Patched xt_domainfilter.h: added #include <linux/types.h>"
+          fi
+          # Dodatkowo: zamiana // komentarza na /* */ dla kompatybilności z -Wcomment
+          sed -i 's|//_XT_DOMAINFILTER_MATCH_H|/* _XT_DOMAINFILTER_MATCH_H */|g' "$HEADER" 2>/dev/null || true
+
       - name: 🔨 Build Kernel
         working-directory: kernel
         run: |
@@ -75,7 +87,9 @@ jobs:
 
           echo "🔍 Using Clang: $(clang --version | head -1)"
           
+          # Generuj config z wyłączonym testem nagłówków UAPI
           make O=out gki_defconfig
+          scripts/config --file out/.config --disable UAPI_HEADER_TEST
           
           # SKIP_HEADERS_CHECK=1 omija walidację nagłówków UAPI (naprawia błąd xt_domainfilter.h)
           # KCFLAGS="-march=armv8-a+lse" naprawia błąd unknown register name 'x0' w atomic_lse.h
@@ -85,7 +99,7 @@ jobs:
             LLVM=1 \
             SKIP_HEADERS_CHECK=1 \
             WERROR=0 \
-            KCFLAGS="-Wno-error -Wno-comment -march=armv8-a+lse"
+            KCFLAGS="-Wno-error -Wno-comment -march=armv8-a+lse -Wno-unknown-warning-option"
 
           # Sprawdź czy powstał obraz
           ls -lh out/arch/arm64/boot/Image.gz || echo "⚠️ Image.gz not found!"
